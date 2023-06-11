@@ -1,0 +1,20 @@
+commerce_payment.commerce_payment_gateway.plugin.diamano_pay_redirect_checkout:
+  type: commerce_payment_gateway_configuration
+  mapping:
+    sandbox_client_id:
+      type: string
+      label: 'Sandbox client id'
+    sandbox_client_secret:
+      type: string
+      label: 'Sandbox client secret'
+    client_id:
+      type: string
+      label: 'Production client id'
+    client_secret:
+      type: string
+      label: 'Production client secret'
+    payment_methods:
+      type: sequence
+      label: 'Moyens de paiements'
+      sequence:
+        - type: string

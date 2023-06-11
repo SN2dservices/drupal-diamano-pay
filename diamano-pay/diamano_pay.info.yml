@@ -1,0 +1,7 @@
+name: Diamano pay
+type: module
+description: 'Passerelle de paiement au Sénégal'
+package: Commerce
+core_version_requirement: ^8.8 || ^9 || ^10
+dependencies:
+  - commerce:commerce_payment

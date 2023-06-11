@@ -1,0 +1,15 @@
+{
+  "name": "drupal/diamano_pay",
+  "type": "drupal-module",
+  "description": "Passerelle de paiement au Sénégal",
+  "homepage": "http://www.diamanopay.com",
+  "license": "GPL-2.0+",
+  "keywords": [
+    "Drupal",
+    "Diamano pay"
+  ],
+  "minimum-stability": "dev",
+  "require": {
+    "drupal/commerce": "~2.0"
+  }
+}
