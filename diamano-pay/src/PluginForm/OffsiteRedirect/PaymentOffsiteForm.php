@@ -23,14 +23,11 @@ class PaymentOffsiteForm extends BasePaymentOffsiteForm
     $configuration = $payment_gateway_plugin->getConfiguration();
     // Payment gateway configuration data.
     $IsLive = $configuration['mode'] !== 'test';
-    $client_id = '';
-    $client_secret = '';
+    $token = '';
     if ($IsLive) {
-      $client_id = $configuration['client_id'];
-      $client_secret = $configuration['client_secret'];
+      $token = $configuration['production_token'];
     } else {
-      $client_id = $configuration['sandbox_client_id'];
-      $client_secret = $configuration['sandbox_client_secret'];
+      $token = $configuration['sandbox_token'];
     }
     $payment_methods = $configuration['payment_methods'];
     // Payment data.
@@ -44,8 +41,7 @@ class PaymentOffsiteForm extends BasePaymentOffsiteForm
       $info = $order->getBillingProfile()->get('address')->first()->getValue();
       $name .= $info['given_name'] . ' ' . $info['family_name'] . 'avec adresse ' . $info['address_line1'];
     }
-    $url = !$IsLive == 'sandbox' ? 'https://sandbox-api.diamanopay.com' : 'https://api.diamanopay.com';
-    $url .= '/api/payment/cms/paymentToken?clientId=' . $client_id . '&clientSecret=' . $client_secret;
+    $url = 'https://api.diamanopay.com/api/payment/paymentToken';
     $host = \Drupal::request()->getSchemeAndHttpHost();
     $baseUrl = \Drupal::request()->getBaseUrl();
     $webhook = $host . $baseUrl . "/payment/notify/diamano_pay";
@@ -70,6 +66,7 @@ class PaymentOffsiteForm extends BasePaymentOffsiteForm
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($body));
     curl_setopt($ch, CURLOPT_HTTPHEADER, array(
       'Content-Type: application/json',
+      'Authorization: Bearer ' . $token,
       'Content-Length: ' . strlen(json_encode($body))
     ));
     $response = json_decode(curl_exec($ch), true);

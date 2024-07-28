@@ -32,19 +32,16 @@ class OffsiteRedirect extends OffsitePaymentGatewayBase implements SupportsNotif
 {
 
   private $isLive;
-  private $clientId;
-  private $clientSecret;
-  private $apiBaseUrl;
+  private $token;
+  private $apiBaseUrl = 'https://api.diamanopay.com';
   /**
    * {@inheritdoc}
    */
   public function defaultConfiguration()
   {
     return [
-      'sandbox_client_id' => '',
-      'sandbox_client_secret' => '',
-      'client_id' => '',
-      'client_secret' => '',
+      'sandbox_token' => '',
+      'production_token' => '',
       'payment_methods' => '',
     ] + parent::defaultConfiguration();
   }
@@ -57,13 +54,10 @@ class OffsiteRedirect extends OffsitePaymentGatewayBase implements SupportsNotif
     parent::__construct($configuration, $plugin_id, $plugin_definition, $entity_type_manager, $payment_type_manager, $payment_method_type_manager, $time);
 
     $this->isLive = $this->configuration['mode'] !== 'test';
-    $this->apiBaseUrl = !$this->isLive == 'sandbox' ? 'https://sandbox-api.diamanopay.com' : 'https://api.diamanopay.com';
     if ($this->isLive) {
-      $this->clientId = $this->configuration['client_id'];
-      $this->clientSecret = $this->configuration['client_secret'];
+      $this->token = $this->configuration['production_token'];
     } else {
-      $this->clientId = $this->configuration['sandbox_client_id'];
-      $this->clientSecret = $this->configuration['sandbox_client_secret'];
+      $this->token = $this->configuration['sandbox_token'];
     }
   }
 
@@ -73,13 +67,10 @@ class OffsiteRedirect extends OffsitePaymentGatewayBase implements SupportsNotif
   public function __wakeup()
   {
     $this->isLive = $this->configuration['mode'] !== 'test';
-    $this->apiBaseUrl = !$this->isLive == 'sandbox' ? 'https://sandbox-api.diamanopay.com' : 'https://api.diamanopay.com';
     if ($this->isLive) {
-      $this->clientId = $this->configuration['client_id'];
-      $this->clientSecret = $this->configuration['client_secret'];
+      $this->token = $this->configuration['production_token'];
     } else {
-      $this->clientId = $this->configuration['sandbox_client_id'];
-      $this->clientSecret = $this->configuration['sandbox_client_secret'];
+      $this->token = $this->configuration['sandbox_token'];
     }
   }
   /**
@@ -89,34 +80,21 @@ class OffsiteRedirect extends OffsitePaymentGatewayBase implements SupportsNotif
   {
     $form = parent::buildConfigurationForm($form, $form_state);
 
-    $form['sandbox_client_id'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Sandbox client id'),
-      '#description' => $this->t("Client id à copier de l'env sandbox diamano pay."),
-      '#default_value' => $this->configuration['sandbox_client_id'],
+    $form['sandbox_token'] = [
+      '#type' => 'textarea',
+      '#title' => $this->t('Sandbox token'),
+      '#description' => $this->t("Token pour l'environnement sandbox"),
+      '#default_value' => $this->configuration['sandbox_token'],
       '#required' => TRUE,
     ];
-    $form['sandbox_client_secret'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Sandbox client secret'),
-      '#description' => $this->t("Client secret à copier de l'env sandbox diamano pay."),
-      '#default_value' => $this->configuration['sandbox_client_secret'],
+    $form['production_token'] = [
+      '#type' => 'textarea',
+      '#title' => $this->t('Production token'),
+      '#description' => $this->t("Token pour l'environnement de production"),
+      '#default_value' => $this->configuration['production_token'],
       '#required' => TRUE,
     ];
-    $form['client_id'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Production client id'),
-      '#description' => $this->t("Client id à copier de l'env prod diamano pay."),
-      '#default_value' => $this->configuration['client_id'],
-      '#required' => TRUE,
-    ];
-    $form['client_secret'] = [
-      '#type' => 'textfield',
-      '#title' => $this->t('Production client secret'),
-      '#description' => $this->t("Client secret à copier de l'env prod diamano pay."),
-      '#default_value' => $this->configuration['client_secret'],
-      '#required' => TRUE,
-    ];
+
 
     $form['payment_methods'] = [
       '#type' => 'select',
@@ -148,10 +126,8 @@ class OffsiteRedirect extends OffsitePaymentGatewayBase implements SupportsNotif
     if (!$form_state->getErrors()) {
 
       $values = $form_state->getValue($form['#parents']);
-      $this->configuration['sandbox_client_id'] = $values['sandbox_client_id'];
-      $this->configuration['sandbox_client_secret'] = $values['sandbox_client_secret'];
-      $this->configuration['client_id'] = $values['client_id'];
-      $this->configuration['client_secret'] = $values['client_secret'];
+      $this->configuration['sandbox_token'] = $values['sandbox_token'];
+      $this->configuration['production_token'] = $values['production_token'];
       $this->configuration['payment_methods'] = $values['payment_methods'];
     }
   }
@@ -162,7 +138,10 @@ class OffsiteRedirect extends OffsitePaymentGatewayBase implements SupportsNotif
 
   public function onNotify(Request $request)
   {
-    $data = $this->getPaymentStatus($request->query->get('token'));
+    $body = $request->getContent();
+    $requestData = json_decode($body, true);
+    $payment_request_id = $requestData['paymentRequestId'];
+    $data = $this->getPaymentStatus($payment_request_id);
     $realExtraData = $data['extraData'];
     $payment_storage = $this->entityTypeManager->getStorage('commerce_payment');
     $balance = $realExtraData['balance'];
@@ -176,7 +155,7 @@ class OffsiteRedirect extends OffsitePaymentGatewayBase implements SupportsNotif
       'amount' => new Price($balance['number'], $balance['currencyCode'])
 
     ];
-    if ($data['status'] === "SUCCESS") {
+    if ($data['status'] === "COMPLETED") {
       $values['state'] = 'completed';
     } else {
       $values['state'] = 'failed';
@@ -187,13 +166,18 @@ class OffsiteRedirect extends OffsitePaymentGatewayBase implements SupportsNotif
     return new JsonResponse($data);
   }
 
-  private function getPaymentStatus($paymentToken)
+  private function getPaymentStatus($payment_request_id)
   {
-    $url = $this->apiBaseUrl . '/api/payment/cms/paymentStatus?clientId=' . $this->clientId . '&clientSecret=' . $this->clientSecret . '&token=' . $paymentToken;
+    $headers = [
+      'Authorization: Bearer ' . $this->token,
+      'Content-Type: application/json'
+    ];
+    $url = $this->apiBaseUrl . '/api/payment/paymentStatus?paymentReference=' . $payment_request_id;
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
     $response = json_decode(curl_exec($ch), true);
     if ($response["statusCode"] != null && $response["statusCode"] != "200") {
